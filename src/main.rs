@@ -1,5 +1,4 @@
 use std::fs::read_to_string;
-use std::ptr::read_volatile;
 use crate::bencode::parse_bencode;
 
 mod bencode;
