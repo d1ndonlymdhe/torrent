@@ -11,13 +11,7 @@ pub fn vec_index_of<T: PartialEq>(vec: &Vec<T>, item: T) -> Result<usize, ()> {
         Err(())
     }
 }
-pub fn index_of(string: impl Into<String>, search_char: char) -> Result<usize, ()> {
-    if let Some(d) = string.into().chars().enumerate().find(|x| { x.1 == search_char }) {
-        Ok(d.0)
-    } else {
-        Err(())
-    }
-}
+
 
 #[cfg(test)]
 mod tests {

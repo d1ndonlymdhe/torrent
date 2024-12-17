@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::{Debug, Formatter};
 use crate::str_utils::{sub_arr, sub_str, vec_index_of};
 
 type BString = Vec<u8>;
@@ -6,7 +7,7 @@ type BInt = i64;
 type BDict = HashMap<String, Bencode>;
 type BList = Vec<Bencode>;
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub enum Bencode {
     Str(BString),
     Int(BInt),
@@ -15,11 +16,33 @@ pub enum Bencode {
     End,
 }
 
-impl Bencode {
-    fn new_str(str: impl Into<String>) -> Self {
-        Bencode::Str(str.into().as_bytes().to_vec())
+impl Debug for Bencode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Bencode::Str(str_val) => {
+                let as_string = String::from_utf8(str_val.clone());
+                if let Ok(as_string) = as_string {
+                    Ok(write!(f, "{}", as_string)?)
+                } else {
+                    Ok(write!(f, "{:#?}", str_val)?)
+                }
+            }
+            Bencode::Int(int_val) => {
+                Ok(write!(f, "{}", int_val)?)
+            }
+            Bencode::List(list_val) => {
+                Ok(write!(f, "{:#?}", list_val)?)
+            }
+            Bencode::Dict(dict_val) => {
+                Ok(write!(f, "{:#?}", dict_val)?)
+            }
+            Bencode::End => {
+                Ok(write!(f, "END")?)
+            }
+        }
     }
 }
+
 
 enum BencodeTypes {
     Str,
@@ -109,7 +132,8 @@ fn parse_string(line: &[u8]) -> Result<ParseResult<BString>, ()> {
     let separator_idx = vec_index_of(&line.to_vec(), ":".as_bytes()[0]);
     match separator_idx {
         Ok(separator_idx) => {
-            let len = sub_str(String::from_utf8(line.to_vec()).unwrap_or_else(|_| { panic!("String length needs to be valid utf8") }), 0, separator_idx);
+            let x = sub_arr(line.to_vec(), 0, separator_idx);
+            let len = sub_str(String::from_utf8(x.clone()).unwrap_or_else(|_| { panic!("String length needs to be valid utf8 {:?}", x) }), 0, separator_idx);
             let len = len.parse::<usize>().unwrap_or_else(|_| { panic!("Invalid string") });
             // let string = sub_str(&line, separator_idx + 1, len);
             let string = sub_arr(line.to_vec(), separator_idx + 1, len);
@@ -125,7 +149,8 @@ fn parse_int(line: &[u8]) -> Result<ParseResult<BInt>, ()> {
     if first_char == "i".as_bytes()[0] {
         let index_of_end = vec_index_of(&line.to_vec(), "e".as_bytes()[0]);
         if let Ok(index_of_end) = index_of_end {
-            let num = sub_str(String::from_utf8(line.to_vec()).unwrap_or_else(|_| { panic!("Integer needs to be valid utf8") }), 1, index_of_end - 1).parse().unwrap_or_else(|_| { panic!("Invalid Integer") });
+            let x = sub_arr(line.to_vec(), 1, index_of_end - 1);
+            let num = sub_str(String::from_utf8(x.clone()).unwrap_or_else(|_| { panic!("Integer needs to be valid utf8 {:?}", x) }), 1, index_of_end - 1).parse().unwrap_or_else(|_| { panic!("Invalid Integer") });
             return Ok(ParseResult::new(num, index_of_end + 1));
         }
     }
