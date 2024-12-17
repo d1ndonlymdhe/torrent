@@ -1,7 +1,8 @@
 use std::collections::HashMap;
-use crate::str_utils::{index_of, sub_str};
+use std::ops::Index;
+use crate::str_utils::{index_of, sub_arr, sub_str, vec_index_of};
 
-type BString = String;
+type BString = Vec<u8>;
 type BInt = i64;
 type BDict = HashMap<String, Bencode>;
 type BList = Vec<Bencode>;
@@ -17,7 +18,7 @@ pub enum Bencode {
 
 impl Bencode {
     fn new_str(str: impl Into<String>) -> Self {
-        Bencode::Str(str.into())
+        Bencode::Str(str.into().as_bytes().to_vec())
     }
 }
 
@@ -51,7 +52,7 @@ pub fn parse_bencode(line: impl Into<String>) -> Result<ParseResult<Bencode>, ()
     let ben_type = get_type(&line);
     match ben_type {
         BencodeTypes::Str => {
-            let res = parse_string(&line);
+            let res = parse_string(&line.as_bytes().to_vec());
             if let Ok(res) = res {
                 let ParseResult { data, len } = res;
                 Ok(ParseResult::new(Bencode::Str(data), len))
@@ -60,7 +61,7 @@ pub fn parse_bencode(line: impl Into<String>) -> Result<ParseResult<Bencode>, ()
             }
         }
         BencodeTypes::Int => {
-            let res = parse_int(&line);
+            let res = parse_int(&(line.as_bytes().to_vec()));
             if let Ok(res) = res {
                 let ParseResult { data, len } = res;
                 Ok(ParseResult::new(Bencode::Int(data), len))
@@ -104,14 +105,16 @@ fn get_type(line: impl Into<String>) -> BencodeTypes {
         _ => BencodeTypes::Str,
     }
 }
-fn parse_string(line: impl Into<String>) -> Result<ParseResult<BString>, ()> {
-    let line = line.into();
-    let separator_idx = index_of(&line, ':');
+fn parse_string(line: &Vec<u8>) -> Result<ParseResult<BString>, ()> {
+    // let line = line.into();
+    // let separator_idx = index_of(&line, ':');
+    let separator_idx = vec_index_of(line, ":".as_bytes()[0]);
     match separator_idx {
         Ok(separator_idx) => {
-            let len = sub_str(&line, 0, separator_idx);
+            let len = sub_str((String::from_utf8(line.clone()).unwrap_or_else(|_| { panic!("String length needs to be valid utf8") })), 0, separator_idx);
             let len = len.parse::<usize>().unwrap_or_else(|_| { panic!("Invalid string") });
-            let string = sub_str(&line, separator_idx + 1, len);
+            // let string = sub_str(&line, separator_idx + 1, len);
+            let string = sub_arr(line.to_vec(), separator_idx + 1, len);
             Ok(ParseResult::new(string, separator_idx + 1 + len))
         }
         Err(_) => {
@@ -119,13 +122,12 @@ fn parse_string(line: impl Into<String>) -> Result<ParseResult<BString>, ()> {
         }
     }
 }
-fn parse_int(line: impl Into<String>) -> Result<ParseResult<BInt>, ()> {
-    let line = line.into();
-    let first_char = sub_str(&line, 0, 1);
-    if first_char == "i" {
-        let index_of_end = index_of(&line, 'e');
+fn parse_int(line: &Vec<u8>) -> Result<ParseResult<BInt>, ()> {
+    let first_char = sub_arr(line.to_vec(), 0, 1)[0];
+    if first_char == "i".as_bytes()[0] {
+        let index_of_end = vec_index_of(&line, "e".as_bytes()[0]);
         if let Ok(index_of_end) = index_of_end {
-            let num = sub_str(&line, 1, index_of_end - 1).parse().unwrap_or_else(|_| { panic!("Invalid Integer") });
+            let num = sub_str(&(String::from_utf8(line.to_vec()).unwrap_or_else(|_| { panic!("Integer needs to be valid utf8") })), 1, index_of_end - 1).parse().unwrap_or_else(|_| { panic!("Invalid Integer") });
             return Ok(ParseResult::new(num, index_of_end + 1));
         }
     }
@@ -175,7 +177,7 @@ fn parse_dict(line: impl Into<String>) -> Result<ParseResult<BDict>, ()> {
                     if let Ok(res) = benccode_value {
                         let ParseResult { data, len } = res;
                         total_parsed += len;
-                        ret_map.insert(map_key, data);
+                        ret_map.insert(String::from_utf8(map_key).unwrap(), data);
                         new_line = sub_str(&new_line, len, new_line.len())
                     } else {
                         panic!("Invalid bencode")
@@ -199,13 +201,13 @@ mod tests {
 
     #[test]
     fn test_parse_string() {
-        assert_eq!(parse_string("4:abcd"), Ok(ParseResult::new(String::from("abcd"), 6)));
-        assert_eq!(parse_string("0:"), Ok(ParseResult::new(String::from(""), 2)))
+        assert_eq!(parse_string(&"4:abcd".as_bytes().to_vec()), Ok(ParseResult::new("abcd".as_bytes().to_vec(), 6)));
+        assert_eq!(parse_string(&"0:".as_bytes().to_vec()), Ok(ParseResult::new("".as_bytes().to_vec(), 2)))
     }
 
     #[test]
     fn test_parse_int() {
-        assert_eq!(parse_int("i123e"), Ok(ParseResult::new(123, 5)))
+        assert_eq!(parse_int(&"i123e".as_bytes().to_vec()), Ok(ParseResult::new(123, 5)))
     }
 
     #[test]
@@ -251,5 +253,4 @@ mod tests {
         let rhs = Ok(ParseResult::new(map, test_str.len()));
         assert_eq!(lhs, rhs);
     }
-   
 }
