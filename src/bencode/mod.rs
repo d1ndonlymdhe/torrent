@@ -1,12 +1,13 @@
 use std::collections::HashMap;
-use crate::str_utils::{index_of, sub_str};
+use std::fmt::{Debug, Formatter};
+use crate::str_utils::{sub_arr, sub_str, vec_index_of};
 
-type BString = String;
+type BString = Vec<u8>;
 type BInt = i64;
 type BDict = HashMap<String, Bencode>;
 type BList = Vec<Bencode>;
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq)]
 pub enum Bencode {
     Str(BString),
     Int(BInt),
@@ -15,11 +16,33 @@ pub enum Bencode {
     End,
 }
 
-impl Bencode {
-    fn new_str(str: impl Into<String>) -> Self {
-        Bencode::Str(str.into())
+impl Debug for Bencode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Bencode::Str(str_val) => {
+                let as_string = String::from_utf8(str_val.clone());
+                if let Ok(as_string) = as_string {
+                    Ok(write!(f, "{}", as_string)?)
+                } else {
+                    Ok(write!(f, "{:#?}", str_val)?)
+                }
+            }
+            Bencode::Int(int_val) => {
+                Ok(write!(f, "{}", int_val)?)
+            }
+            Bencode::List(list_val) => {
+                Ok(write!(f, "{:#?}", list_val)?)
+            }
+            Bencode::Dict(dict_val) => {
+                Ok(write!(f, "{:#?}", dict_val)?)
+            }
+            Bencode::End => {
+                Ok(write!(f, "END")?)
+            }
+        }
     }
 }
+
 
 enum BencodeTypes {
     Str,
@@ -45,22 +68,21 @@ impl<T> ParseResult<T> {
     }
 }
 
-pub fn parse_bencode(line: impl Into<String>) -> Result<ParseResult<Bencode>, ()>
+pub fn parse_bencode(line: &[u8]) -> Result<ParseResult<Bencode>, ()>
 {
-    let line = line.into();
-    let ben_type = get_type(&line);
+    let ben_type = get_type(line);
     match ben_type {
         BencodeTypes::Str => {
-            let res = parse_string(&line);
+            let res = parse_string(line);
             if let Ok(res) = res {
                 let ParseResult { data, len } = res;
                 Ok(ParseResult::new(Bencode::Str(data), len))
             } else {
-                panic!("Invalid String {}", line)
+                panic!("Invalid String {:?}", line.to_vec())
             }
         }
         BencodeTypes::Int => {
-            let res = parse_int(&line);
+            let res = parse_int(line);
             if let Ok(res) = res {
                 let ParseResult { data, len } = res;
                 Ok(ParseResult::new(Bencode::Int(data), len))
@@ -69,7 +91,7 @@ pub fn parse_bencode(line: impl Into<String>) -> Result<ParseResult<Bencode>, ()
             }
         }
         BencodeTypes::List => {
-            let res = parse_list(&line);
+            let res = parse_list(line);
             if let Ok(res) = res {
                 let ParseResult { data, len } = res;
                 Ok(ParseResult::new(Bencode::List(data), len))
@@ -78,7 +100,7 @@ pub fn parse_bencode(line: impl Into<String>) -> Result<ParseResult<Bencode>, ()
             }
         }
         BencodeTypes::Dict => {
-            let res = parse_dict(&line);
+            let res = parse_dict(line);
             if let Ok(res) = res {
                 let ParseResult { data, len } = res;
                 Ok(ParseResult::new(Bencode::Dict(data), len))
@@ -92,10 +114,10 @@ pub fn parse_bencode(line: impl Into<String>) -> Result<ParseResult<Bencode>, ()
     }
 }
 
-fn get_type(line: impl Into<String>) -> BencodeTypes {
-    let line = line.into();
-    let first_char = sub_str(line, 0, 1);
-    match first_char.as_str() {
+fn get_type(line: &[u8]) -> BencodeTypes {
+    // let line = line.into();
+    let first_char = sub_arr(line.to_vec(), 0, 1);
+    match String::from_utf8(first_char).unwrap().as_str() {
         "i" => BencodeTypes::Int,
         "d" => BencodeTypes::Dict,
         "l" => BencodeTypes::List,
@@ -104,14 +126,17 @@ fn get_type(line: impl Into<String>) -> BencodeTypes {
         _ => BencodeTypes::Str,
     }
 }
-fn parse_string(line: impl Into<String>) -> Result<ParseResult<BString>, ()> {
-    let line = line.into();
-    let separator_idx = index_of(&line, ':');
+fn parse_string(line: &[u8]) -> Result<ParseResult<BString>, ()> {
+    // let line = line.into();
+    // let separator_idx = index_of(&line, ':');
+    let separator_idx = vec_index_of(&line.to_vec(), ":".as_bytes()[0]);
     match separator_idx {
         Ok(separator_idx) => {
-            let len = sub_str(&line, 0, separator_idx);
+            let x = sub_arr(line.to_vec(), 0, separator_idx);
+            let len = sub_str(String::from_utf8(x.clone()).unwrap_or_else(|_| { panic!("String length needs to be valid utf8 {:?}", x) }), 0, separator_idx);
             let len = len.parse::<usize>().unwrap_or_else(|_| { panic!("Invalid string") });
-            let string = sub_str(&line, separator_idx + 1, len);
+            // let string = sub_str(&line, separator_idx + 1, len);
+            let string = sub_arr(line.to_vec(), separator_idx + 1, len);
             Ok(ParseResult::new(string, separator_idx + 1 + len))
         }
         Err(_) => {
@@ -119,24 +144,23 @@ fn parse_string(line: impl Into<String>) -> Result<ParseResult<BString>, ()> {
         }
     }
 }
-fn parse_int(line: impl Into<String>) -> Result<ParseResult<BInt>, ()> {
-    let line = line.into();
-    let first_char = sub_str(&line, 0, 1);
-    if first_char == "i" {
-        let index_of_end = index_of(&line, 'e');
+fn parse_int(line: &[u8]) -> Result<ParseResult<BInt>, ()> {
+    let first_char = sub_arr(line.to_vec(), 0, 1)[0];
+    if first_char == "i".as_bytes()[0] {
+        let index_of_end = vec_index_of(&line.to_vec(), "e".as_bytes()[0]);
         if let Ok(index_of_end) = index_of_end {
-            let num = sub_str(&line, 1, index_of_end - 1).parse().unwrap_or_else(|_| { panic!("Invalid Integer") });
+            let x = sub_arr(line.to_vec(), 1, index_of_end - 1);
+            let num = sub_str(String::from_utf8(x.clone()).unwrap_or_else(|_| { panic!("Integer needs to be valid utf8 {:?}", x) }), 1, index_of_end - 1).parse().unwrap_or_else(|_| { panic!("Invalid Integer") });
             return Ok(ParseResult::new(num, index_of_end + 1));
         }
     }
     Err(())
 }
 
-fn parse_list(line: impl Into<String>) -> Result<ParseResult<BList>, ()> {
-    let line = line.into();
-    let first_char = sub_str(&line, 0, 1);
-    if first_char == "l" {
-        let mut new_line = sub_str(&line, 1, line.len());
+fn parse_list(line: &[u8]) -> Result<ParseResult<BList>, ()> {
+    let first_char = sub_arr(line.to_vec(), 0, 1)[0];
+    if first_char == "l".as_bytes()[0] {
+        let mut new_line = sub_arr(line.to_vec(), 1, line.len());
         let mut ret_vec = Vec::new();
         let mut total_parsed = 1;
         loop {
@@ -148,7 +172,7 @@ fn parse_list(line: impl Into<String>) -> Result<ParseResult<BList>, ()> {
                     break;
                 } else {
                     total_parsed += len;
-                    new_line = sub_str(&new_line, len, new_line.len());
+                    new_line = sub_arr(new_line.to_vec(), len, new_line.len());
                     ret_vec.push(data)
                 }
             }
@@ -157,11 +181,10 @@ fn parse_list(line: impl Into<String>) -> Result<ParseResult<BList>, ()> {
     }
     Err(())
 }
-fn parse_dict(line: impl Into<String>) -> Result<ParseResult<BDict>, ()> {
-    let line = line.into();
-    let first_char = sub_str(&line, 0, 1);
-    if first_char == "d" {
-        let mut new_line = sub_str(&line, 1, line.len());
+fn parse_dict(line: &[u8]) -> Result<ParseResult<BDict>, ()> {
+    let first_char = sub_arr(line.to_vec(), 0, 1)[0];
+    if first_char == "d".as_bytes()[0] {
+        let mut new_line = sub_arr(line.to_vec(), 1, line.len());
         let mut ret_map = HashMap::new();
         let mut total_parsed = 1;
         loop {
@@ -170,13 +193,13 @@ fn parse_dict(line: impl Into<String>) -> Result<ParseResult<BDict>, ()> {
                 let ParseResult { data, len } = res;
                 total_parsed += len;
                 if let Bencode::Str(map_key) = data {
-                    new_line = sub_str(&new_line, len, new_line.len());
+                    new_line = sub_arr(new_line.clone(), len, new_line.len());
                     let benccode_value = parse_bencode(&new_line);
                     if let Ok(res) = benccode_value {
                         let ParseResult { data, len } = res;
                         total_parsed += len;
-                        ret_map.insert(map_key, data);
-                        new_line = sub_str(&new_line, len, new_line.len())
+                        ret_map.insert(String::from_utf8(map_key).unwrap(), data);
+                        new_line = sub_arr(new_line.clone(), len, new_line.len())
                     } else {
                         panic!("Invalid bencode")
                     }
@@ -194,24 +217,23 @@ fn parse_dict(line: impl Into<String>) -> Result<ParseResult<BDict>, ()> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::read_to_string;
     use super::*;
 
     #[test]
     fn test_parse_string() {
-        assert_eq!(parse_string("4:abcd"), Ok(ParseResult::new(String::from("abcd"), 6)));
-        assert_eq!(parse_string("0:"), Ok(ParseResult::new(String::from(""), 2)))
+        assert_eq!(parse_string(&"4:abcd".as_bytes().to_vec()), Ok(ParseResult::new("abcd".as_bytes().to_vec(), 6)));
+        assert_eq!(parse_string(&"0:".as_bytes().to_vec()), Ok(ParseResult::new("".as_bytes().to_vec(), 2)))
     }
 
     #[test]
     fn test_parse_int() {
-        assert_eq!(parse_int("i123e"), Ok(ParseResult::new(123, 5)))
+        assert_eq!(parse_int(&"i123e".as_bytes().to_vec()), Ok(ParseResult::new(123, 5)))
     }
 
     #[test]
     fn test_list() {
         let test_str = String::from("l4:spam4:eggsi-234el4:spam4:eggsi-234e4:mdheee");
-        let lhs = parse_list(&test_str);
+        let lhs = parse_list(&(test_str.as_bytes().to_vec()));
         let rhs = Ok(
             ParseResult::new(
                 vec![
@@ -233,7 +255,7 @@ mod tests {
     #[test]
     fn test_dict() {
         let test_str = String::from("d4:listli12e3:zln6:whatupd1:k1:vee4:mdhe4:here3:numi-234ee");
-        let lhs = parse_dict(&test_str);
+        let lhs = parse_dict(test_str.as_bytes());
 
         let mut map = HashMap::new();
         let mut inner_map = HashMap::new();
@@ -251,5 +273,4 @@ mod tests {
         let rhs = Ok(ParseResult::new(map, test_str.len()));
         assert_eq!(lhs, rhs);
     }
-   
 }
