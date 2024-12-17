@@ -6,6 +6,6 @@ mod str_utils;
 
 fn main() {
     let content = read_to_string("test.torrent").unwrap();
-    
-    println!("{:#?}", parse_bencode(content));
+
+    println!("{:#?}", parse_bencode(&content.as_bytes().to_vec()));
 }
