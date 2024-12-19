@@ -16,6 +16,12 @@ pub enum Bencode {
     End,
 }
 
+impl Bencode {
+    fn new_str(string: impl Into<String>) -> Self {
+        Bencode::Str(string.into().as_bytes().to_vec())
+    }
+}
+
 impl Debug for Bencode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {

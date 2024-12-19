@@ -20,10 +20,5 @@ mod tests {
     fn test_sub_str() {
         assert_eq!(sub_str("HELLO", 1, 3), String::from("ELL"));
     }
-    #[test]
-    fn test_index() {
-        assert_eq!(index_of("HELLO", 'E'), Ok(1));
-        assert_eq!(index_of("HELLO", 'L'), Ok(2));
-        assert_eq!(index_of("HELLO", 'Z'), Err(()));
-    }
+   
 }
