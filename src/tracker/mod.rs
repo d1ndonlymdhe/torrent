@@ -79,7 +79,7 @@ pub fn connect() {
 }
 
 #[cfg(test)]
-mod tests {
+mod tracker_tests {
     use super::*;
     #[test]
     fn test_bytes() {

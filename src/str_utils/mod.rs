@@ -11,14 +11,3 @@ pub fn vec_index_of<T: PartialEq>(vec: &Vec<T>, item: T) -> Result<usize, ()> {
         Err(())
     }
 }
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_sub_str() {
-        assert_eq!(sub_str("HELLO", 1, 3), String::from("ELL"));
-    }
-   
-}

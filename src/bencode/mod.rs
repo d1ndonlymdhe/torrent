@@ -156,7 +156,7 @@ fn parse_int(line: &[u8]) -> Result<ParseResult<BInt>, ()> {
         let index_of_end = vec_index_of(&line.to_vec(), "e".as_bytes()[0]);
         if let Ok(index_of_end) = index_of_end {
             let x = sub_arr(line.to_vec(), 1, index_of_end - 1);
-            let num = sub_str(String::from_utf8(x.clone()).unwrap_or_else(|_| { panic!("Integer needs to be valid utf8 {:?}", x) }), 1, index_of_end - 1).parse().unwrap_or_else(|_| { panic!("Invalid Integer") });
+            let num = sub_str(String::from_utf8(x.clone()).unwrap_or_else(|_| { panic!("Integer needs to be valid utf8 {:?}", x) }), 0, index_of_end - 1).parse().unwrap_or_else(|_| { panic!("Invalid Integer") });
             return Ok(ParseResult::new(num, index_of_end + 1));
         }
     }
@@ -222,7 +222,7 @@ fn parse_dict(line: &[u8]) -> Result<ParseResult<BDict>, ()> {
 }
 
 #[cfg(test)]
-mod tests {
+mod bencode_tests {
     use super::*;
 
     #[test]
