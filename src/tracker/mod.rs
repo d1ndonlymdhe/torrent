@@ -1,5 +1,5 @@
-use std::arch::x86_64::_mm256_i32gather_epi32;
 use std::net::{ToSocketAddrs, UdpSocket};
+use std::time::Duration;
 use rand::{thread_rng, Rng};
 
 struct ConnectionRequest {
@@ -101,22 +101,34 @@ fn bytes_to_int(bytes: &[u8]) -> i128 {
 
 pub fn connect() {
     let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
-    let destination = "tracker.opentrackr.org:1337";
+    // let destination = "tracker.opentrackr.org:1337";
+    let destination = "tracker.leechers-paradise.org:6969";
     let request = ConnectionRequest::new(ConnectionRequestAction::CONNECT);
     let req_bytes = request.to_req_bytes();
     let dest_addr = destination.to_socket_addrs().unwrap().next().unwrap();
-    match socket.send_to(&req_bytes, dest_addr) {
-        Ok(bytes_sent) => {
-            println!("sent {}", bytes_sent);
-            let mut buf = [0; 20];
-            let res_size = socket.recv(&mut buf).unwrap();
-            if res_size == 16 {
-                let response = ConnectionResponse::from_res_bytes(&buf);
-                println!("{:#?}", response);
+
+    let mut tries = 0;
+    while tries < 8 {
+        let timeout = 15 * 2u64.pow(tries);
+        tries += 1;
+        println!("Sending connection request");
+        let send_result = socket.send_to(&req_bytes, dest_addr);
+        match send_result {
+            Ok(bytes_sent) => {
+                println!("sent {}", bytes_sent);
+                let mut buf = [0; 20];
+                let _ = socket.set_read_timeout(Some(Duration::new(timeout, 0)));
+                let res_size = socket.recv(&mut buf);
+                if let Ok(res_size) = res_size {
+                    if res_size == 16 {
+                        let response = ConnectionResponse::from_res_bytes(&buf);
+                        println!("{:#?}", response);
+                    }
+                }
             }
-        }
-        Err(e) => {
-            eprintln!("Failed {}", e);
+            Err(e) => {
+                eprintln!("Failed {}", e);
+            }
         }
     }
 }

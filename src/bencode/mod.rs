@@ -1,3 +1,4 @@
+//https://www.bittorrent.org/beps/bep_0003.html
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use crate::str_utils::{sub_arr, sub_str, vec_index_of};
