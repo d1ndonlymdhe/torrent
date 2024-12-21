@@ -4,7 +4,7 @@ use std::fmt::{Debug, Formatter};
 use crate::str_utils::{sub_arr, sub_str, vec_index_of};
 
 type BString = Vec<u8>;
-type BInt = i64;
+type BInt = i128;
 type BDict = HashMap<String, Bencode>;
 type BList = Vec<Bencode>;
 
@@ -62,8 +62,8 @@ enum BencodeTypes {
 #[derive(Debug)]
 #[derive(PartialEq)]
 pub struct ParseResult<T> {
-    pub  data: T,
-    pub  len: usize,
+    pub data: T,
+    pub len: usize,
 }
 impl<T> ParseResult<T> {
     fn new(data: T, len: usize) -> Self
@@ -222,6 +222,67 @@ fn parse_dict(line: &[u8]) -> Result<ParseResult<BDict>, ()> {
     Err(())
 }
 
+fn encode_string(string: &[u8]) -> Vec<u8> {
+    let len = string.len();
+    let mut ret = Vec::new();
+    ret.extend(len.to_string().as_bytes());
+    ret.push(b':');
+    ret.extend(string);
+    ret.to_vec()
+}
+fn encode_int(int: &i128) -> Vec<u8> {
+    let mut ret = Vec::new();
+    ret.push(b'i');
+    ret.extend(int.to_string().as_bytes());
+    ret.push(b'e');
+    ret
+}
+fn encode_list(list: &[Bencode]) -> Vec<u8> {
+    let mut ret = Vec::new();
+    ret.push(b'l');
+    for bencode in list {
+        ret.extend(encode_bencode(bencode))
+    }
+    ret.push(b'e');
+    ret
+}
+fn encode_dict(dict: &BDict) -> Vec<u8> {
+    let mut ret = Vec::new();
+    ret.push(b'd');
+    let mut key_vec = dict.keys().collect::<Vec<&String>>();
+    //ensure keys are sorted alphabetically
+    key_vec.sort();
+    for key in key_vec {
+        let bencode_val = dict.get(key).unwrap();
+        let encoded_val = encode_bencode(bencode_val);
+        let encoded_key = encode_string(key.as_bytes());
+        ret.extend(encoded_key);
+        ret.extend(encoded_val);
+    }
+    ret.push(b'e');
+    ret
+}
+fn encode_bencode(bencode: &Bencode) -> Vec<u8> {
+    let mut ret = Vec::new();
+    match bencode {
+        Bencode::Str(b_str) => {
+            ret.extend(encode_string(&b_str))
+        }
+        Bencode::Int(b_int) => {
+            ret.extend(encode_int(b_int))
+        }
+        Bencode::List(b_list) => {
+            ret.extend(encode_list(b_list))
+        }
+        Bencode::Dict(b_dict) => {
+            ret.extend(encode_dict(b_dict))
+        }
+        Bencode::End => {}
+    }
+    ret
+}
+
+
 #[cfg(test)]
 mod bencode_tests {
     use super::*;
@@ -279,5 +340,8 @@ mod bencode_tests {
         map.insert(String::from("num"), Bencode::Int(-234));
         let rhs = Ok(ParseResult::new(map, test_str.len()));
         assert_eq!(lhs, rhs);
+
+        let encoded = encode_dict(&rhs.unwrap().data);
+        assert_eq!(String::from_utf8(encoded).unwrap(), test_str);
     }
 }
