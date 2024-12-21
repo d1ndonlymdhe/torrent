@@ -62,8 +62,8 @@ enum BencodeTypes {
 #[derive(Debug)]
 #[derive(PartialEq)]
 pub struct ParseResult<T> {
-    data: T,
-    len: usize,
+    pub  data: T,
+    pub  len: usize,
 }
 impl<T> ParseResult<T> {
     fn new(data: T, len: usize) -> Self

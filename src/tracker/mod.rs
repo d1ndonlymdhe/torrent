@@ -21,43 +21,32 @@ impl ConnectionRequest {
     }
     fn to_req_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
-
-        let mut transaction_id = self.transaction_id;
-        for _ in 0..4 {
-            let r = (transaction_id % 0x100) as u8;
-            transaction_id /= 0x100;
-            bytes.push(r);
-        }
-
-        let mut action = self.action.get_code();
-        for _ in 0..4 {
-            let r = (action % 0x100) as u8;
-            action /= 0x100;
-            bytes.push(r);
-        }
-
-        let mut protocol_id = self.protocol_id;
-        for _ in 0..8 {
-            let r = (protocol_id % 0x100) as u8;
-            protocol_id /= 0x100;
-            bytes.push(r);
-        }
+        bytes.extend(int_to_bytes(self.transaction_id as i128, 4));
+        bytes.extend(int_to_bytes(self.action.get_code() as i128, 4));
+        bytes.extend(int_to_bytes(self.protocol_id as i128, 8));
         bytes.into_iter().rev().collect()
     }
 }
 
 #[derive(Debug)]
 pub enum ConnectionRequestAction {
-    CONNECT
+    CONNECT,
+    ANNOUNCE,
 }
 impl ConnectionRequestAction {
     fn get_code(&self) -> i32 {
-        match self { ConnectionRequestAction::CONNECT => { 0 } }
+        match self {
+            ConnectionRequestAction::CONNECT => { 0 }
+            ConnectionRequestAction::ANNOUNCE => { 1 }
+        }
     }
     fn from_code(code: i32) -> ConnectionRequestAction {
         match code {
             0 => {
                 ConnectionRequestAction::CONNECT
+            }
+            1 => {
+                ConnectionRequestAction::ANNOUNCE
             }
             _ => {
                 panic!("Invalid action code {}", code)
@@ -67,10 +56,10 @@ impl ConnectionRequestAction {
 }
 
 #[derive(Debug)]
-struct ConnectionResponse {
-    action: ConnectionRequestAction,
-    transaction_id: i32,
-    connection_id: i64,
+pub struct ConnectionResponse {
+    pub action: ConnectionRequestAction,
+    pub transaction_id: i32,
+    pub connection_id: i64,
 }
 
 impl ConnectionResponse {
@@ -89,6 +78,73 @@ impl ConnectionResponse {
     }
 }
 
+fn int_to_bytes(int: i128, size: usize) -> Vec<u8> {
+    let mut int = int;
+    let mut bytes = Vec::new();
+    for _ in 0..size {
+        let r = (int % 0x100) as u8;
+        int /= 0x100;
+        bytes.push(r);
+    }
+    bytes
+}
+
+
+struct AnnounceRequest {
+    connection_id: i64,
+    action: ConnectionRequestAction,
+    transaction_id: i32,
+    // this needs to be 20 bytes
+    info_hash: Vec<u8>,
+    //this needs to be 20 bytes
+    peer_id: Vec<u8>,
+    downloaded: i64,
+    left: i64,
+    uploaded: i64,
+    event: i32,
+    ip_address: i32,
+    key: i32,
+    num_want: i32,
+    port: i16,
+}
+impl AnnounceRequest {
+    fn new() -> Self {
+        AnnounceRequest {
+            connection_id: 0,
+            action: ConnectionRequestAction::ANNOUNCE,
+            transaction_id: 0,
+            info_hash: [0x0; 20].to_vec(),
+            peer_id: [0x0; 20].to_vec(),
+            downloaded: 0,
+            left: 0,
+            uploaded: 0,
+            event: 0,
+            ip_address: 0,
+            key: 0,
+            num_want: -1,
+            port: 0,
+        }
+    }
+
+
+    fn to_req_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend(int_to_bytes(self.connection_id as i128, 8));
+        bytes.extend(int_to_bytes(self.action.get_code() as i128, 4));
+        bytes.extend(int_to_bytes(self.transaction_id as i128, 4));
+        bytes.extend(&self.info_hash);
+        bytes.extend(&self.peer_id);
+        bytes.extend(int_to_bytes(self.downloaded as i128, 8));
+        bytes.extend(int_to_bytes(self.left as i128, 8));
+        bytes.extend(int_to_bytes(self.uploaded as i128, 8));
+        bytes.extend(int_to_bytes(self.ip_address as i128, 4));
+        bytes.extend(int_to_bytes(self.key as i128, 4));
+        bytes.extend(int_to_bytes(self.num_want as i128, 4));
+        bytes.extend(int_to_bytes(self.port as i128, 2));
+        bytes
+    }
+}
+
 fn bytes_to_int(bytes: &[u8]) -> i128 {
     let mut num = 0;
     for (idx, byte) in bytes.iter().rev().enumerate() {
@@ -99,30 +155,81 @@ fn bytes_to_int(bytes: &[u8]) -> i128 {
 }
 
 
-pub fn connect() {
-    let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
-    // let destination = "tracker.opentrackr.org:1337";
-    let destination = "tracker.leechers-paradise.org:6969";
-    let request = ConnectionRequest::new(ConnectionRequestAction::CONNECT);
-    let req_bytes = request.to_req_bytes();
-    let dest_addr = destination.to_socket_addrs().unwrap().next().unwrap();
+fn parse_url(url: impl Into<String>) -> (String, String, String) {
+    let url = url.into();
+    let mut protocal = Vec::new();
+    let mut host = Vec::new();
+    let mut path = Vec::new();
+    let mut flag = 0;
+    let mut idx = 0;
+    let url_chars = url.split("").collect::<Vec<&str>>();
+    while idx <= url.len() {
+        let char = url_chars[idx];
+        if char.eq("") {
+            idx += 1;
+            continue;
+        }
+        if flag == 0 {
+            if char.ne(":") {
+                protocal.push(char);
+                idx += 1;
+            } else {
+                flag = 1;
+                idx += 3;
+                continue;
+            }
+        }
+        if flag == 1 {
+            if char.ne("/") {
+                host.push(char);
+                idx += 1;
+            } else {
+                flag = 2;
+                idx += 1;
+                continue;
+            }
+        }
+        if flag == 2 {
+            path.push(char);
+            idx += 1;
+        }
+    }
+    (protocal.into_iter().collect(), host.into_iter().collect(), path.into_iter().collect())
+}
 
+pub fn connect(url: impl Into<String>) -> Result<ConnectionResponse, ()> {
+    let url = url.into();
+    let (protocol, hostname, path) = parse_url(&url);
+
+    if protocol != "udp" {
+        println!("Only UDP tracker supported");
+        return Err(());
+    }
+
+    let mut url_data_vec = vec![0x2, 0xc];
+    url_data_vec.extend_from_slice(path.as_bytes());
+
+    let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
+    let request = ConnectionRequest::new(ConnectionRequestAction::CONNECT);
+    let mut req_bytes = request.to_req_bytes();
+    req_bytes.extend(url_data_vec);
+    let dest_addr = hostname.to_socket_addrs().unwrap().next().unwrap();
     let mut tries = 0;
-    while tries < 8 {
+
+    while tries < 2 {
         let timeout = 15 * 2u64.pow(tries);
         tries += 1;
-        println!("Sending connection request");
+        println!("Sending connection request to {}", url);
         let send_result = socket.send_to(&req_bytes, dest_addr);
         match send_result {
-            Ok(bytes_sent) => {
-                println!("sent {}", bytes_sent);
+            Ok(_) => {
                 let mut buf = [0; 20];
                 let _ = socket.set_read_timeout(Some(Duration::new(timeout, 0)));
                 let res_size = socket.recv(&mut buf);
                 if let Ok(res_size) = res_size {
-                    if res_size == 16 {
+                    if res_size >= 16 {
                         let response = ConnectionResponse::from_res_bytes(&buf);
-                        println!("{:#?}", response);
+                        return Ok(response);
                     }
                 }
             }
@@ -131,6 +238,15 @@ pub fn connect() {
             }
         }
     }
+
+    println!("Could not connect to tracker {} in {} tries", url, tries);
+    Err(())
+}
+
+pub fn announce(url: impl Into<String>, connection_id: i64, transaction_id: i32) {
+    let url = url.into();
+    let (protocol, hostname, path) = parse_url(&url);
+    let port: i16 = hostname.split(":").collect::<Vec<&str>>()[1].parse().unwrap();
 }
 
 #[cfg(test)]
