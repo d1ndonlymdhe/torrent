@@ -8,7 +8,6 @@ mod bencode;
 mod str_utils;
 mod tracker;
 
-
 fn get_announce_list(info_dict: &BDict) -> Vec<String> {
     let mut announce_list: Vec<String> = Vec::new();
     let announce_url = info_dict.get("announce").unwrap_or_else(|| { panic!("No announce in file") });
@@ -32,12 +31,12 @@ fn get_announce_list(info_dict: &BDict) -> Vec<String> {
     }
     announce_list
 }
-
 fn get_info_hash(info_dict: BDict) -> Vec<u8> {
     let mut hasher = Sha1::new();
     hasher.update(encode_bencode(&Bencode::Dict(info_dict)));
     hasher.finalize().as_slice().to_vec()
 }
+
 fn main() {
     let content = read("test.torrent").unwrap();
     let parsed = parse_bencode(&content);
@@ -72,5 +71,8 @@ fn main() {
     }
     let announce_rul = selected_announce_url.unwrap();
     let connection_response = connection_response.unwrap();
-    announce(announce_rul, connection_response.connection_id, connection_response.transaction_id, info_hash, &socket)
+    let announce_response = announce(announce_rul, connection_response.connection_id, connection_response.transaction_id, info_hash, &socket);
+    if announce_response.is_ok() {
+        println!("{:#?}", announce_response.unwrap());
+    }
 }
