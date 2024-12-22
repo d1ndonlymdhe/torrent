@@ -3,10 +3,10 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use crate::str_utils::{sub_arr, sub_str, vec_index_of};
 
-type BString = Vec<u8>;
-type BInt = i128;
-type BDict = HashMap<String, Bencode>;
-type BList = Vec<Bencode>;
+pub type BString = Vec<u8>;
+pub type BInt = i128;
+pub type BDict = HashMap<String, Bencode>;
+pub type BList = Vec<Bencode>;
 
 #[derive(PartialEq)]
 pub enum Bencode {
@@ -262,7 +262,7 @@ fn encode_dict(dict: &BDict) -> Vec<u8> {
     ret.push(b'e');
     ret
 }
-fn encode_bencode(bencode: &Bencode) -> Vec<u8> {
+pub fn encode_bencode(bencode: &Bencode) -> Vec<u8> {
     let mut ret = Vec::new();
     match bencode {
         Bencode::Str(b_str) => {
