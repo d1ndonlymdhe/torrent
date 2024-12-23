@@ -6,7 +6,7 @@ use crate::tracker::types::{AnnounceRequest, AnnounceResponse, ConnectionRequest
 mod utils;
 mod types;
 
-pub fn connect(url: impl Into<String>, socket: &UdpSocket) -> Result<ConnectionResponse, ()> {
+pub fn connect(url: impl Into<String>, socket_v4: &UdpSocket, socket_v6: &UdpSocket) -> Result<ConnectionResponse, ()> {
     let max_tries = 1; // this should be 8 according to spec
     let try_coeff = 1; // this should be 15 according to spec
 
@@ -24,7 +24,21 @@ pub fn connect(url: impl Into<String>, socket: &UdpSocket) -> Result<ConnectionR
     let request = ConnectionRequest::new(ConnectionRequestAction::CONNECT);
     let mut req_bytes = request.to_req_bytes();
     req_bytes.extend(url_data_vec);
-    let dest_addr = hostname.to_socket_addrs().unwrap().next().unwrap();
+    let dest_addr = hostname.to_socket_addrs();
+    if dest_addr.is_err() {
+        return Err(());
+    }
+    let dest_addr = dest_addr.unwrap().next();
+    if dest_addr.is_none() {
+        return Err(());
+    }
+    let dest_addr = dest_addr.unwrap();
+    let socket = if dest_addr.is_ipv6() {
+        socket_v6
+    } else {
+        socket_v4
+    };
+
     let mut tries = 0;
 
     while tries < max_tries {
@@ -36,7 +50,7 @@ pub fn connect(url: impl Into<String>, socket: &UdpSocket) -> Result<ConnectionR
             Ok(_) => {
                 let mut buf = [0; 20];
                 let _ = socket.set_read_timeout(Some(Duration::new(timeout, 0)));
-                let res_size = socket.recv(&mut buf);
+                let res_size = socket_v4.recv(&mut buf);
                 if let Ok(res_size) = res_size {
                     if res_size >= 16 {
                         //TODO: add checks
@@ -55,15 +69,12 @@ pub fn connect(url: impl Into<String>, socket: &UdpSocket) -> Result<ConnectionR
     Err(())
 }
 
-pub fn announce(url: impl Into<String>, connection_id: i64, transaction_id: i32, info_hash: Vec<u8>, socket: &UdpSocket) -> Result<AnnounceResponse, ()> {
+pub fn announce(url: impl Into<String>, connection_id: i64, transaction_id: i32, info_hash: Vec<u8>, socket_v4: &UdpSocket, socket_v6: &UdpSocket) -> Result<AnnounceResponse, ()> {
     let max_tries = 1; // this should be 8 according to spec
     let try_coeff = 1; // this should be 15 according to spec
-
-    socket.set_write_timeout(None).unwrap();
     let url = url.into();
     let (_, hostname, path) = parse_url(&url);
     let _: i16 = hostname.split(":").collect::<Vec<&str>>()[1].parse().unwrap();
-    let socket = UdpSocket::bind("0.0.0.0:43792").unwrap();
     let request = AnnounceRequest::new(&connection_id, &transaction_id, info_hash.clone());
 
     let mut url_data_vec = vec![0x2, 0xc];
@@ -72,8 +83,21 @@ pub fn announce(url: impl Into<String>, connection_id: i64, transaction_id: i32,
     let mut request_bytes = request.to_req_bytes();
     request_bytes.extend(url_data_vec);
 
-    let destination_addr = hostname.to_socket_addrs().unwrap().next().unwrap();
-    let bytes_sent = socket.send_to(request_bytes.as_slice(), destination_addr).unwrap();
+    let dest_addr = hostname.to_socket_addrs();
+    if dest_addr.is_err() {
+        return Err(());
+    }
+    let dest_addr = dest_addr.unwrap().next();
+    if dest_addr.is_none() {
+        return Err(());
+    }
+    let dest_addr = dest_addr.unwrap();
+    let socket = if dest_addr.is_ipv6() {
+        socket_v6
+    } else {
+        socket_v4
+    };
+    let bytes_sent = socket.send_to(request_bytes.as_slice(), dest_addr).unwrap();
 
     let mut tries = 0;
     println!("Sending announce request to {}, bytes = {}", url, bytes_sent);

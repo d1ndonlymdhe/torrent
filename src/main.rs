@@ -54,10 +54,10 @@ fn main() {
     };
     let mut selected_announce_url = None;
     let mut connection_response = None;
-    let socket = UdpSocket::bind("0.0.0.0:0").unwrap();
-
+    let socket_v4 = UdpSocket::bind("0.0.0.0:0").unwrap();
+    let socket_v6 = UdpSocket::bind("[::]:1").unwrap();
     for announce_url in announce_list {
-        let response = connect(&announce_url, &socket);
+        let response = connect(&announce_url, &socket_v4, &socket_v6);
         if response.is_err() {
             continue;
         }
@@ -71,7 +71,7 @@ fn main() {
     }
     let announce_rul = selected_announce_url.unwrap();
     let connection_response = connection_response.unwrap();
-    let announce_response = announce(announce_rul, connection_response.connection_id, connection_response.transaction_id, info_hash, &socket);
+    let announce_response = announce(announce_rul, connection_response.connection_id, connection_response.transaction_id, info_hash, &socket_v4, &socket_v6);
     if announce_response.is_ok() {
         println!("{:#?}", announce_response.unwrap());
     }
