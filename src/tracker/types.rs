@@ -41,16 +41,17 @@ impl ConnectionRequestAction {
             ConnectionRequestAction::ANNOUNCE => { 1 }
         }
     }
-    fn from_code(code: i32) -> ConnectionRequestAction {
+    fn from_code(code: i32) -> Result<ConnectionRequestAction, ()> {
         match code {
             0 => {
-                ConnectionRequestAction::CONNECT
+                Ok(ConnectionRequestAction::CONNECT)
             }
             1 => {
-                ConnectionRequestAction::ANNOUNCE
+                Ok(ConnectionRequestAction::ANNOUNCE)
             }
             _ => {
-                panic!("Invalid action code {}", code)
+                println!("Invalid action code {}", code);
+                Err(())
             }
         }
     }
@@ -63,18 +64,20 @@ pub struct ConnectionResponse {
     pub connection_id: i64,
 }
 impl ConnectionResponse {
-    pub(crate) fn from_res_bytes(bytes: &[u8]) -> Self {
+    pub(crate) fn from_res_bytes(bytes: &[u8]) -> Result<Self, ()> {
         let action_bytes = &bytes[0..4];
         let transaction_id_bytes = &bytes[4..8];
         let connection_id_bytes = &bytes[8..16];
         let action = ConnectionRequestAction::from_code(bytes_to_int(action_bytes) as i32);
         let transaction_id = bytes_to_int(transaction_id_bytes) as i32;
         let connection_id = bytes_to_int(connection_id_bytes) as i64;
-        ConnectionResponse {
-            action,
-            transaction_id,
-            connection_id,
-        }
+        Ok(
+            ConnectionResponse {
+                action: action?,
+                transaction_id,
+                connection_id,
+            }
+        )
     }
 }
 
@@ -146,10 +149,10 @@ pub struct AnnounceResponse {
     leechers: i32,
     seeders: i32,
     // IP address and TCP port
-    peers: Vec<(Vec<String>, i16)>,
+    pub(crate) peers: Vec<(String, i16)>,
 }
 impl AnnounceResponse {
-    pub(crate) fn from_bytes(bytes: Vec<u8>) -> Self {
+    pub(crate) fn from_bytes(bytes: &[u8], len: usize) -> Result<Self, ()> {
         let action_bytes = &bytes[0..4];
         let transaction_id_bytes = &bytes[4..8];
         let interval_bytes = &bytes[8..12];
@@ -157,20 +160,25 @@ impl AnnounceResponse {
         let seeders_bytes = &bytes[16..20];
         let mut offset = 20;
         let mut peers = Vec::new();
-        while offset < bytes.len() {
-            let new_slice = sub_arr(bytes.to_vec(), offset, offset + 6);
-            let ip_bytes = &new_slice[0..4];
-            let port_bytes = &new_slice[4..6];
-            peers.push((ip_bytes.iter().map(|item| { item.to_string() }).collect(), bytes_to_int(port_bytes) as i16));
-            offset += 6;
+        if offset + 6 <= len {
+            while offset < len {
+                let new_slice = sub_arr(bytes.to_vec(), offset, offset + 6);
+                let ip_bytes = &new_slice[0..4];
+                let port_bytes = &new_slice[4..6];
+                let ip_string = format!("{}.{}.{}.{}", ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]);
+                peers.push((ip_string, bytes_to_int(port_bytes) as i16));
+                offset += 6;
+            }
         }
-        AnnounceResponse {
-            action: ConnectionRequestAction::from_code(bytes_to_int(action_bytes) as i32),
-            transaction_id: bytes_to_int(transaction_id_bytes) as i32,
-            interval: bytes_to_int(interval_bytes) as i32,
-            leechers: bytes_to_int(leechers_bytes) as i32,
-            seeders: bytes_to_int(seeders_bytes) as i32,
-            peers,
-        }
+        Ok(
+            AnnounceResponse {
+                action: ConnectionRequestAction::from_code(bytes_to_int(action_bytes) as i32)?,
+                transaction_id: bytes_to_int(transaction_id_bytes) as i32,
+                interval: bytes_to_int(interval_bytes) as i32,
+                leechers: bytes_to_int(leechers_bytes) as i32,
+                seeders: bytes_to_int(seeders_bytes) as i32,
+                peers,
+            }
+        )
     }
 }

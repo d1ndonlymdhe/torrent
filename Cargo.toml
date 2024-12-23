@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 rand = "0.8.5"
 sha1 = "0.10.6"
+socket2 = { version = "0.5.8", features = ["all"] }

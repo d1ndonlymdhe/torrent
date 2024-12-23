@@ -1,5 +1,5 @@
 use std::fs::{read};
-use std::net::UdpSocket;
+use std::net::{SocketAddr};
 use sha1::{Digest, Sha1};
 use crate::bencode::{encode_bencode, parse_bencode, BDict, Bencode};
 use crate::tracker::{announce, connect};
@@ -20,8 +20,8 @@ fn get_announce_list(info_dict: &BDict) -> Vec<String> {
         if let Bencode::List(announce_list_data) = announce_list_data {
             for announce_url in announce_list_data {
                 if let Bencode::List(announce_url) = announce_url {
-                    for announce_URL in announce_url {
-                        if let Bencode::Str(announce_url) = announce_URL {
+                    for announce_url in announce_url {
+                        if let Bencode::Str(announce_url) = announce_url {
                             announce_list.push(String::from_utf8(announce_url.to_vec()).unwrap())
                         }
                     }
@@ -40,9 +40,11 @@ fn get_info_hash(info_dict: BDict) -> Vec<u8> {
 fn main() {
     let content = read("test.torrent").unwrap();
     let parsed = parse_bencode(&content);
+
     if parsed.is_err() {
         panic!("Invalid torrent file")
     }
+
     let file_data = parsed.unwrap().data;
     let (announce_list, info_hash) = match file_data {
         Bencode::Dict(info_dict) => {
@@ -52,27 +54,34 @@ fn main() {
             panic!("Invalid torrent file")
         }
     };
-    let mut selected_announce_url = None;
-    let mut connection_response = None;
-    let socket_v4 = UdpSocket::bind("0.0.0.0:0").unwrap();
-    let socket_v6 = UdpSocket::bind("[::]:1").unwrap();
+
+    let socket = Socket::new(Domain::IPV6, Type::DGRAM, Some(Protocol::UDP)).unwrap();
+    socket.set_only_v6(false).unwrap();
+
+    let addr: SocketAddr = "[::]:0".parse().unwrap();
+    socket.bind(&addr.into()).unwrap();
+
+    let mut announce_response_list = Vec::new();
+
     for announce_url in announce_list {
         let response = connect(&announce_url, &socket_v4, &socket_v6);
         if response.is_err() {
             continue;
         }
-        let response = response.unwrap();
-        selected_announce_url = Some(announce_url);
-        connection_response = Some(response);
-        break;
+        let connection_response = response.unwrap();
+        let announce_response = announce(announce_url, connection_response.connection_id, connection_response.transaction_id, info_hash.clone(), &socket);
+        if let Ok(announce_response) = announce_response {
+            announce_response_list.push(announce_response);
+        }
     }
-    if selected_announce_url.is_none() || connection_response.is_none() {
-        panic!("Could not connect to any tracker")
+
+    let mut peers = Vec::new();
+    for announce_response in announce_response_list {
+        for peer in announce_response.peers {
+            if peer.0 != "0.0.0.0" && peer.1 >= 0 {
+                peers.push(peer);
+            }
+        }
     }
-    let announce_rul = selected_announce_url.unwrap();
-    let connection_response = connection_response.unwrap();
-    let announce_response = announce(announce_rul, connection_response.connection_id, connection_response.transaction_id, info_hash, &socket_v4, &socket_v6);
-    if announce_response.is_ok() {
-        println!("{:#?}", announce_response.unwrap());
-    }
+    println!("Peers: {:?}", peers);
 }

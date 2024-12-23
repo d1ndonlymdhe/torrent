@@ -1,4 +1,5 @@
-use std::net::{ToSocketAddrs, UdpSocket};
+use std::mem::MaybeUninit;
+use std::net::{ToSocketAddrs};
 use std::time::Duration;
 use crate::tracker::utils::{parse_url};
 use crate::tracker::types::{AnnounceRequest, AnnounceResponse, ConnectionRequest, ConnectionRequestAction, ConnectionResponse};
