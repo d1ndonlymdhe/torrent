@@ -1,14 +1,16 @@
-use std::net::{ToSocketAddrs, UdpSocket};
+use std::mem::MaybeUninit;
+use std::net::{ToSocketAddrs};
 use std::time::Duration;
+use socket2::{SockAddr, Socket};
 use crate::tracker::utils::{parse_url};
 use crate::tracker::types::{AnnounceRequest, AnnounceResponse, ConnectionRequest, ConnectionRequestAction, ConnectionResponse};
 
 mod utils;
 mod types;
 
-pub fn connect(url: impl Into<String>, socket: &UdpSocket) -> Result<ConnectionResponse, ()> {
+pub fn connect(url: impl Into<String>, socket: &Socket) -> Result<ConnectionResponse, ()> {
     let max_tries = 1; // this should be 8 according to spec
-    let try_coeff = 1; // this should be 15 according to spec
+    let try_coeff = 5; // this should be 15 according to spec
 
     let url = url.into();
     let (protocol, hostname, path) = parse_url(&url);
@@ -24,24 +26,36 @@ pub fn connect(url: impl Into<String>, socket: &UdpSocket) -> Result<ConnectionR
     let request = ConnectionRequest::new(ConnectionRequestAction::CONNECT);
     let mut req_bytes = request.to_req_bytes();
     req_bytes.extend(url_data_vec);
-    let dest_addr = hostname.to_socket_addrs().unwrap().next().unwrap();
+    let dest_addr = hostname.to_socket_addrs();
+    if dest_addr.is_err() {
+        return Err(());
+    }
+    let dest_addr = dest_addr.unwrap().next();
+    if dest_addr.is_none() {
+        return Err(());
+    }
+    let dest_addr = dest_addr.unwrap();
     let mut tries = 0;
-
     while tries < max_tries {
         let timeout = try_coeff * 2u64.pow(tries);
         tries += 1;
         println!("Sending connection request to {}", url);
-        let send_result = socket.send_to(&req_bytes, dest_addr);
+        let send_result = socket.send_to(&req_bytes, &SockAddr::from(dest_addr));
         match send_result {
             Ok(_) => {
-                let mut buf = [0; 20];
+                let mut buf = [MaybeUninit::new(0); 1024];
                 let _ = socket.set_read_timeout(Some(Duration::new(timeout, 0)));
                 let res_size = socket.recv(&mut buf);
                 if let Ok(res_size) = res_size {
                     if res_size >= 16 {
                         //TODO: add checks
-                        let response = ConnectionResponse::from_res_bytes(&buf);
-                        return Ok(response);
+                        let response = ConnectionResponse::from_res_bytes(
+                            &*buf.as_slice().iter().map(|x| {
+                                unsafe {
+                                    return *x.as_ptr();
+                                }
+                            }).collect::<Vec<u8>>());
+                        return response;
                     }
                 }
             }
@@ -55,15 +69,13 @@ pub fn connect(url: impl Into<String>, socket: &UdpSocket) -> Result<ConnectionR
     Err(())
 }
 
-pub fn announce(url: impl Into<String>, connection_id: i64, transaction_id: i32, info_hash: Vec<u8>, socket: &UdpSocket) -> Result<AnnounceResponse, ()> {
-    let max_tries = 1; // this should be 8 according to spec
-    let try_coeff = 1; // this should be 15 according to spec
-
+pub fn announce(url: impl Into<String>, connection_id: i64, transaction_id: i32, info_hash: Vec<u8>, socket: &Socket) -> Result<AnnounceResponse, ()> {
+    let max_tries = 1; // this should be 8 according to specx
+    let try_coeff = 5; // this should be 15 according to spec
     socket.set_write_timeout(None).unwrap();
     let url = url.into();
     let (_, hostname, path) = parse_url(&url);
     let _: i16 = hostname.split(":").collect::<Vec<&str>>()[1].parse().unwrap();
-    let socket = UdpSocket::bind("0.0.0.0:43792").unwrap();
     let request = AnnounceRequest::new(&connection_id, &transaction_id, info_hash.clone());
 
     let mut url_data_vec = vec![0x2, 0xc];
@@ -72,20 +84,38 @@ pub fn announce(url: impl Into<String>, connection_id: i64, transaction_id: i32,
     let mut request_bytes = request.to_req_bytes();
     request_bytes.extend(url_data_vec);
 
-    let destination_addr = hostname.to_socket_addrs().unwrap().next().unwrap();
-    let bytes_sent = socket.send_to(request_bytes.as_slice(), destination_addr).unwrap();
+    let dest_addr = hostname.to_socket_addrs();
+    if dest_addr.is_err() {
+        return Err(());
+    }
+    let dest_addr = dest_addr.unwrap().next();
+    if dest_addr.is_none() {
+        return Err(());
+    }
+    let dest_addr = dest_addr.unwrap();
+    let bytes_sent = socket.send_to(request_bytes.as_slice(), &SockAddr::from(dest_addr)).unwrap();
 
     let mut tries = 0;
     println!("Sending announce request to {}, bytes = {}", url, bytes_sent);
-    let mut buff = [0; 98];
+    let mut buff = [MaybeUninit::new(0); 1024];
     while tries < max_tries {
         let timeout = try_coeff * 2u64.pow(tries);
         tries += 1;
         let _ = socket.set_read_timeout(Some(Duration::new(timeout, 0)));
-        if let Ok(_) = socket.recv(&mut buff) {
+        if let Ok(len) = socket.recv(&mut buff) {
             //TODO: add checks
-            let response = AnnounceResponse::from_bytes(buff.to_vec());
-            return Ok(response);
+            if len >= 20 {
+                println!("Received {} bytes", len);
+                let response = AnnounceResponse::from_bytes(
+                    &*buff.as_slice().iter().map(|x| {
+                        unsafe {
+                            return *x.as_ptr();
+                        }
+                    }).collect::<Vec<u8>>(),
+                    len,
+                );
+                return response;
+            }
         } else {
             println!("Could not receive announce request");
         }
