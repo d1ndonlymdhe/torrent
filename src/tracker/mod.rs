@@ -1,5 +1,5 @@
 use std::mem::MaybeUninit;
-use std::net::{ToSocketAddrs};
+use std::net::{ToSocketAddrs, UdpSocket};
 use std::time::Duration;
 use crate::tracker::utils::{parse_url};
 use crate::tracker::types::{AnnounceRequest, AnnounceResponse, ConnectionRequest, ConnectionRequestAction, ConnectionResponse};
@@ -56,7 +56,7 @@ pub fn connect(url: impl Into<String>, socket_v4: &UdpSocket, socket_v6: &UdpSoc
                     if res_size >= 16 {
                         //TODO: add checks
                         let response = ConnectionResponse::from_res_bytes(&buf);
-                        return Ok(response);
+                        return response;
                     }
                 }
             }
@@ -107,10 +107,10 @@ pub fn announce(url: impl Into<String>, connection_id: i64, transaction_id: i32,
         let timeout = try_coeff * 2u64.pow(tries);
         tries += 1;
         let _ = socket.set_read_timeout(Some(Duration::new(timeout, 0)));
-        if let Ok(_) = socket.recv(&mut buff) {
+        if let Ok(len) = socket.recv(&mut buff) {
             //TODO: add checks
-            let response = AnnounceResponse::from_bytes(buff.to_vec());
-            return Ok(response);
+            let response = AnnounceResponse::from_bytes(&buff.to_vec(), len);
+            return response;
         } else {
             println!("Could not receive announce request");
         }

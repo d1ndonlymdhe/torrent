@@ -1,5 +1,5 @@
 use std::fs::{read};
-use std::net::{SocketAddr};
+use std::net::{SocketAddr, UdpSocket};
 use sha1::{Digest, Sha1};
 use crate::bencode::{encode_bencode, parse_bencode, BDict, Bencode};
 use crate::tracker::{announce, connect};
@@ -55,11 +55,8 @@ fn main() {
         }
     };
 
-    let socket = Socket::new(Domain::IPV6, Type::DGRAM, Some(Protocol::UDP)).unwrap();
-    socket.set_only_v6(false).unwrap();
-
-    let addr: SocketAddr = "[::]:0".parse().unwrap();
-    socket.bind(&addr.into()).unwrap();
+    let socket_v4 = UdpSocket::bind("0.0.0.0:0").unwrap();
+    let socket_v6 = UdpSocket::bind("[::]:0").unwrap();
 
     let mut announce_response_list = Vec::new();
 
@@ -69,7 +66,7 @@ fn main() {
             continue;
         }
         let connection_response = response.unwrap();
-        let announce_response = announce(announce_url, connection_response.connection_id, connection_response.transaction_id, info_hash.clone(), &socket);
+        let announce_response = announce(announce_url, connection_response.connection_id, connection_response.transaction_id, info_hash.clone(), &socket_v4, &socket_v6);
         if let Ok(announce_response) = announce_response {
             announce_response_list.push(announce_response);
         }
