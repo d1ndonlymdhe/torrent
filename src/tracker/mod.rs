@@ -35,8 +35,10 @@ pub fn connect(url: impl Into<String>, socket_v4: &UdpSocket, socket_v6: &UdpSoc
     }
     let dest_addr = dest_addr.unwrap();
     let socket = if dest_addr.is_ipv6() {
+        println!("Is v6");
         socket_v6
     } else {
+        println!("Is v4");
         socket_v4
     };
 
@@ -45,7 +47,6 @@ pub fn connect(url: impl Into<String>, socket_v4: &UdpSocket, socket_v6: &UdpSoc
     while tries < max_tries {
         let timeout = try_coeff * 2u64.pow(tries);
         tries += 1;
-        println!("Sending connection request to {}", url);
         let send_result = socket.send_to(&req_bytes, dest_addr);
         match send_result {
             Ok(_) => {
@@ -56,6 +57,7 @@ pub fn connect(url: impl Into<String>, socket_v4: &UdpSocket, socket_v6: &UdpSoc
                     if res_size >= 16 {
                         //TODO: add checks
                         let response = ConnectionResponse::from_res_bytes(&buf);
+                        println!("SUCCESS");
                         return response;
                     }
                 }
@@ -65,7 +67,6 @@ pub fn connect(url: impl Into<String>, socket_v4: &UdpSocket, socket_v6: &UdpSoc
             }
         }
     }
-
     println!("Could not connect to tracker {} in {} tries", url, tries);
     Err(())
 }
@@ -101,8 +102,7 @@ pub fn announce(url: impl Into<String>, connection_id: i64, transaction_id: i32,
     let bytes_sent = socket.send_to(request_bytes.as_slice(), dest_addr).unwrap();
 
     let mut tries = 0;
-    println!("Sending announce request to {}, bytes = {}", url, bytes_sent);
-    let mut buff = [0; 98];
+    let mut buff = [0; 1024];
     while tries < max_tries {
         let timeout = try_coeff * 2u64.pow(tries);
         tries += 1;

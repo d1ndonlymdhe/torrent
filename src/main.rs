@@ -61,15 +61,22 @@ fn main() {
     let mut announce_response_list = Vec::new();
 
     for announce_url in announce_list {
+        println!("URL: {}", announce_url);
         let response = connect(&announce_url, &socket_v4, &socket_v6);
         if response.is_err() {
+            println!("CONNECT ERROR");
+            println!("----");
             continue;
         }
         let connection_response = response.unwrap();
         let announce_response = announce(announce_url, connection_response.connection_id, connection_response.transaction_id, info_hash.clone(), &socket_v4, &socket_v6);
-        if let Ok(announce_response) = announce_response {
-            announce_response_list.push(announce_response);
+        if announce_response.is_err() {
+            println!("ANNOUNCE ERROR");
+            println!("----");
+            continue;
         }
+        announce_response_list.push(announce_response.unwrap());
+        println!("-----");
     }
 
     let mut peers = Vec::new();
