@@ -57,7 +57,6 @@ pub fn connect(url: impl Into<String>, socket_v4: &UdpSocket, socket_v6: &UdpSoc
                     if res_size >= 16 {
                         //TODO: add checks
                         let response = ConnectionResponse::from_res_bytes(&buf);
-                        println!("SUCCESS");
                         return response;
                     }
                 }
@@ -83,8 +82,10 @@ pub fn announce(url: impl Into<String>, connection_id: i64, transaction_id: i32,
     url_data_vec.extend_from_slice(path.as_bytes());
 
     let mut request_bytes = request.to_req_bytes();
-    request_bytes.extend(url_data_vec);
-
+    if !path.is_empty() {
+        request_bytes.extend(url_data_vec);
+        request_bytes.extend(vec![0x1, 0x1, 0x0]);
+    }
     let dest_addr = hostname.to_socket_addrs();
     if dest_addr.is_err() {
         return Err(());

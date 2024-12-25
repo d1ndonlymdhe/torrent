@@ -154,6 +154,13 @@ pub struct AnnounceResponse {
 impl AnnounceResponse {
     pub(crate) fn from_bytes(bytes: &[u8], len: usize) -> Result<Self, ()> {
         let action_bytes = &bytes[0..4];
+        let action = bytes_to_int(action_bytes);
+        if action == 3 {
+            let message_bytes = sub_arr(bytes.to_vec(), 8, len);
+            println!("Action == 3");
+            println!("Message: {}", String::from_utf8(message_bytes).unwrap());
+            return Err(());
+        }
         let transaction_id_bytes = &bytes[4..8];
         let interval_bytes = &bytes[8..12];
         let leechers_bytes = &bytes[12..16];
@@ -170,6 +177,8 @@ impl AnnounceResponse {
                 offset += 6;
             }
         }
+
+
         Ok(
             AnnounceResponse {
                 action: ConnectionRequestAction::from_code(bytes_to_int(action_bytes) as i32)?,

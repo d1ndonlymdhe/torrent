@@ -68,6 +68,7 @@ fn main() {
             println!("----");
             continue;
         }
+        println!("CONNECT SUCCESS");
         let connection_response = response.unwrap();
         let announce_response = announce(announce_url, connection_response.connection_id, connection_response.transaction_id, info_hash.clone(), &socket_v4, &socket_v6);
         if announce_response.is_err() {
@@ -75,6 +76,7 @@ fn main() {
             println!("----");
             continue;
         }
+        println!("ANNOUNCE SUCCESS");
         announce_response_list.push(announce_response.unwrap());
         println!("-----");
     }
