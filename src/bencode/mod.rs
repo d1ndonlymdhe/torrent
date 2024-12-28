@@ -289,19 +289,19 @@ mod bencode_tests {
 
     #[test]
     fn test_parse_string() {
-        assert_eq!(parse_string(&"4:abcd".as_bytes().to_vec()), Ok(ParseResult::new("abcd".as_bytes().to_vec(), 6)));
-        assert_eq!(parse_string(&"0:".as_bytes().to_vec()), Ok(ParseResult::new("".as_bytes().to_vec(), 2)))
+        assert_eq!(parse_string("4:abcd".as_bytes()), Ok(ParseResult::new("abcd".as_bytes().to_vec(), 6)));
+        assert_eq!(parse_string("0:".as_bytes()), Ok(ParseResult::new("".as_bytes().to_vec(), 2)))
     }
 
     #[test]
     fn test_parse_int() {
-        assert_eq!(parse_int(&"i123e".as_bytes().to_vec()), Ok(ParseResult::new(123, 5)))
+        assert_eq!(parse_int("i123e".as_bytes()), Ok(ParseResult::new(123, 5)))
     }
 
     #[test]
     fn test_list() {
         let test_str = String::from("l4:spam4:eggsi-234el4:spam4:eggsi-234e4:mdheee");
-        let lhs = parse_list(&(test_str.as_bytes().to_vec()));
+        let lhs = parse_list(test_str.as_bytes());
         let rhs = Ok(
             ParseResult::new(
                 vec![

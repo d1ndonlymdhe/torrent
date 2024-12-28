@@ -2,7 +2,8 @@ use std::fs::{read};
 use std::net::{SocketAddr, UdpSocket};
 use sha1::{Digest, Sha1};
 use crate::bencode::{encode_bencode, parse_bencode, BDict, Bencode};
-use crate::tracker::{announce, connect};
+use crate::tracker::{announce, announce_http, connect};
+use crate::tracker::types::AnnounceRequest;
 
 mod bencode;
 mod str_utils;
@@ -57,20 +58,25 @@ fn main() {
 
     let socket_v4 = UdpSocket::bind("0.0.0.0:0").unwrap();
     let socket_v6 = UdpSocket::bind("[::]:0").unwrap();
-
+    println!("{:?}",info_hash.clone());
     let mut announce_response_list = Vec::new();
+    announce_http("http://tracker.opentrackr.org:1337/announce", AnnounceRequest::new(
+        &0,
+        info_hash.clone(),
+    )).unwrap();
+
 
     for announce_url in announce_list {
         println!("URL: {}", announce_url);
-        let response = connect(&announce_url, &socket_v4, &socket_v6);
-        if response.is_err() {
+        let connect_response = connect(&announce_url, &socket_v4, &socket_v6);
+        if connect_response.is_err() {
             println!("CONNECT ERROR");
             println!("----");
             continue;
         }
         println!("CONNECT SUCCESS");
-        let connection_response = response.unwrap();
-        let announce_response = announce(announce_url, connection_response.connection_id, connection_response.transaction_id, info_hash.clone(), &socket_v4, &socket_v6);
+        let connection_response = connect_response.unwrap();
+        let announce_response = announce(announce_url, connection_response.connection_id, info_hash.clone(), &socket_v4, &socket_v6);
         if announce_response.is_err() {
             println!("ANNOUNCE ERROR");
             println!("----");

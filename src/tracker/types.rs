@@ -22,10 +22,10 @@ impl ConnectionRequest {
     }
     pub(crate) fn to_req_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
-        bytes.extend(int_to_bytes(self.transaction_id as i128, 4));
-        bytes.extend(int_to_bytes(self.action.get_code() as i128, 4));
-        bytes.extend(int_to_bytes(self.protocol_id as i128, 8));
-        bytes.into_iter().rev().collect()
+        bytes.extend(&self.protocol_id.to_be_bytes());
+        bytes.extend(&self.action.get_code().to_be_bytes());
+        bytes.extend(&self.transaction_id.to_be_bytes());
+        bytes
     }
 }
 
@@ -68,9 +68,9 @@ impl ConnectionResponse {
         let action_bytes = &bytes[0..4];
         let transaction_id_bytes = &bytes[4..8];
         let connection_id_bytes = &bytes[8..16];
-        let action = ConnectionRequestAction::from_code(bytes_to_int(action_bytes) as i32);
-        let transaction_id = bytes_to_int(transaction_id_bytes) as i32;
-        let connection_id = bytes_to_int(connection_id_bytes) as i64;
+        let action = ConnectionRequestAction::from_code(i32::from_be_bytes(action_bytes.try_into().unwrap()));
+        let transaction_id = i32::from_be_bytes(transaction_id_bytes.try_into().unwrap());
+        let connection_id = i64::from_be_bytes(connection_id_bytes.try_into().unwrap());
         Ok(
             ConnectionResponse {
                 action: action?,
@@ -82,33 +82,34 @@ impl ConnectionResponse {
 }
 
 pub struct AnnounceRequest {
-    connection_id: i64,
-    action: ConnectionRequestAction,
-    transaction_id: i32,
+    pub connection_id: i64,
+    pub action: ConnectionRequestAction,
+    pub transaction_id: i32,
     // this needs to be 20 bytes
-    info_hash: Vec<u8>,
+    pub info_hash: Vec<u8>,
     //this needs to be 20 bytes
-    peer_id: Vec<u8>,
-    downloaded: i64,
-    left: i64,
-    uploaded: i64,
-    event: i32,
-    ip_address: i32,
-    key: i32,
-    num_want: i32,
-    port: i16,
+    pub peer_id: Vec<u8>,
+    pub downloaded: i64,
+    pub left: i64,
+    pub uploaded: i64,
+    pub event: i32,
+    pub ip_address: i32,
+    pub key: i32,
+    pub num_want: i32,
+    pub port: i16,
 }
 impl AnnounceRequest {
-    pub(crate) fn new(connection_id: &i64, transaction_id: &i32, info_hash: Vec<u8>) -> Self {
+    pub(crate) fn new(connection_id: &i64, info_hash: Vec<u8>) -> Self {
         let mut id = b"-PC0001-".to_vec();
         let mut rng = thread_rng();
         let id_num = rng.gen_range(0..0xFFF);
         let key = rng.gen_range(0..0xFFFFFF);
         id.extend(int_to_bytes(id_num, 12));
+        let transaction_id = rng.gen_range(0..i32::MAX);
         AnnounceRequest {
             connection_id: *connection_id,
             action: ConnectionRequestAction::ANNOUNCE,
-            transaction_id: *transaction_id,
+            transaction_id,
             info_hash,
             peer_id: id,
             downloaded: 0,
@@ -124,20 +125,20 @@ impl AnnounceRequest {
 
     pub(crate) fn to_req_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
-        bytes.extend(int_to_bytes(self.port as i128, 2));
-        bytes.extend(int_to_bytes(self.num_want as i128, 4));
-        bytes.extend(int_to_bytes(self.key as i128, 4));
-        bytes.extend(int_to_bytes(self.ip_address as i128, 4));
-        bytes.extend(int_to_bytes(self.event as i128, 4));
-        bytes.extend(int_to_bytes(self.uploaded as i128, 8));
-        bytes.extend(int_to_bytes(self.left as i128, 8));
-        bytes.extend(int_to_bytes(self.downloaded as i128, 8));
-        bytes.extend(&self.peer_id.clone().into_iter().rev().collect::<Vec<u8>>());
-        bytes.extend(&self.info_hash.clone().into_iter().rev().collect::<Vec<u8>>());
-        bytes.extend(int_to_bytes(self.transaction_id as i128, 4));
-        bytes.extend(int_to_bytes(self.action.get_code() as i128, 4));
-        bytes.extend(int_to_bytes(self.connection_id as i128, 8));
-        bytes.into_iter().rev().collect()
+        bytes.extend(self.connection_id.to_be_bytes());
+        bytes.extend(&self.action.get_code().to_be_bytes());
+        bytes.extend(&self.transaction_id.to_be_bytes());
+        bytes.extend(&self.info_hash);
+        bytes.extend(&self.peer_id);
+        bytes.extend(&self.downloaded.to_be_bytes());
+        bytes.extend(&self.left.to_be_bytes());
+        bytes.extend(&self.uploaded.to_be_bytes());
+        bytes.extend(&self.event.to_be_bytes());
+        bytes.extend(&self.ip_address.to_be_bytes());
+        bytes.extend(&self.key.to_be_bytes());
+        bytes.extend(&self.num_want.to_be_bytes());
+        bytes.extend(&self.port.to_be_bytes());
+        bytes
     }
 }
 
@@ -181,11 +182,11 @@ impl AnnounceResponse {
 
         Ok(
             AnnounceResponse {
-                action: ConnectionRequestAction::from_code(bytes_to_int(action_bytes) as i32)?,
-                transaction_id: bytes_to_int(transaction_id_bytes) as i32,
-                interval: bytes_to_int(interval_bytes) as i32,
-                leechers: bytes_to_int(leechers_bytes) as i32,
-                seeders: bytes_to_int(seeders_bytes) as i32,
+                action: ConnectionRequestAction::from_code(i32::from_be_bytes(action_bytes.try_into().unwrap()))?,
+                transaction_id: i32::from_be_bytes(transaction_id_bytes.try_into().unwrap()),
+                interval: i32::from_be_bytes(interval_bytes.try_into().unwrap()),
+                leechers: i32::from_be_bytes(leechers_bytes.try_into().unwrap()),
+                seeders: i32::from_be_bytes(seeders_bytes.try_into().unwrap()),
                 peers,
             }
         )
