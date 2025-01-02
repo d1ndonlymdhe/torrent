@@ -8,7 +8,7 @@ pub type BInt = i128;
 pub type BDict = HashMap<String, Bencode>;
 pub type BList = Vec<Bencode>;
 
-#[derive(PartialEq)]
+#[derive(PartialEq,Clone)]
 pub enum Bencode {
     Str(BString),
     Int(BInt),

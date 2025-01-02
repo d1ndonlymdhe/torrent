@@ -1,9 +1,8 @@
-use std::fs::{read};
-use std::net::{SocketAddr, UdpSocket};
-use sha1::{Digest, Sha1};
 use crate::bencode::{encode_bencode, parse_bencode, BDict, Bencode};
-use crate::tracker::{announce, announce_http, connect};
-use crate::tracker::types::AnnounceRequest;
+use crate::tracker::{announce, connect};
+use sha1::{Digest, Sha1};
+use std::fs::read;
+use std::net::{UdpSocket};
 
 mod bencode;
 mod str_utils;
@@ -11,7 +10,9 @@ mod tracker;
 
 fn get_announce_list(info_dict: &BDict) -> Vec<String> {
     let mut announce_list: Vec<String> = Vec::new();
-    let announce_url = info_dict.get("announce").unwrap_or_else(|| { panic!("No announce in file") });
+    let announce_url = info_dict
+        .get("announce")
+        .unwrap_or_else(|| panic!("No announce in file"));
     if let Bencode::Str(announce_url) = announce_url {
         announce_list.push(String::from_utf8(announce_url.to_vec()).unwrap())
     }
@@ -32,9 +33,10 @@ fn get_announce_list(info_dict: &BDict) -> Vec<String> {
     }
     announce_list
 }
-fn get_info_hash(info_dict: BDict) -> Vec<u8> {
+fn get_info_hash(info_dict: &BDict) -> Vec<u8> {
     let mut hasher = Sha1::new();
-    hasher.update(encode_bencode(&Bencode::Dict(info_dict)));
+    let encoded = encode_bencode(&Bencode::Dict(info_dict.clone()));
+    hasher.update(&encoded);
     hasher.finalize().as_slice().to_vec()
 }
 
@@ -49,22 +51,22 @@ fn main() {
     let file_data = parsed.unwrap().data;
     let (announce_list, info_hash) = match file_data {
         Bencode::Dict(info_dict) => {
-            (get_announce_list(&info_dict), get_info_hash(info_dict))
+            let announce_list = get_announce_list(&info_dict);
+            let info_dict = info_dict.get("info").expect("No info in file");
+            if let Bencode::Dict(info_dict) = info_dict {
+                (announce_list, get_info_hash(info_dict))
+            } else {
+                panic!("Invalid torrent file")
+            }
         }
         _ => {
             panic!("Invalid torrent file")
         }
     };
+    let mut announce_response_list = Vec::new();
 
     let socket_v4 = UdpSocket::bind("0.0.0.0:0").unwrap();
     let socket_v6 = UdpSocket::bind("[::]:0").unwrap();
-    println!("{:?}",info_hash.clone());
-    let mut announce_response_list = Vec::new();
-    announce_http("http://tracker.opentrackr.org:1337/announce", AnnounceRequest::new(
-        &0,
-        info_hash.clone(),
-    )).unwrap();
-
 
     for announce_url in announce_list {
         println!("URL: {}", announce_url);
@@ -76,7 +78,13 @@ fn main() {
         }
         println!("CONNECT SUCCESS");
         let connection_response = connect_response.unwrap();
-        let announce_response = announce(announce_url, connection_response.connection_id, info_hash.clone(), &socket_v4, &socket_v6);
+        let announce_response = announce(
+            announce_url,
+            connection_response.connection_id,
+            info_hash.clone(),
+            &socket_v4,
+            &socket_v6,
+        );
         if announce_response.is_err() {
             println!("ANNOUNCE ERROR");
             println!("----");
@@ -87,13 +95,14 @@ fn main() {
         println!("-----");
     }
 
-    let mut peers = Vec::new();
-    for announce_response in announce_response_list {
-        for peer in announce_response.peers {
-            if peer.0 != "0.0.0.0" && peer.1 >= 0 {
-                peers.push(peer);
-            }
-        }
-    }
-    println!("Peers: {:?}", peers);
+    // let mut peers = HashSet::new();
+    // for announce_response in announce_response_list {
+    //     for peer in announce_response.peers {
+    //         if peer.0 != "0.0.0.0" && peer.1 >= 0 {
+    //             peers.insert(peer);
+    //         }
+    //     }
+    // }
+    println!("Peers: {:?}", announce_response_list);
+    println!("Peers count: {}", announce_response_list.len());
 }
